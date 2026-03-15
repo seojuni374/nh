@@ -11,6 +11,11 @@ from data.pipeline import fetch_all, add_technical_features
 from signals.combiner import analyze_all, analyze_ticker
 from risk.manager import screen_results
 from report.daily_report import generate_pdf
+from learning.tracker import save_predictions, evaluate_predictions, overall_accuracy
+from learning.discussion import (
+    load_params, save_params, apply_params_to_config,
+    run_team_discussion, accuracy_trend_summary,
+)
 
 
 class ChiefOrchestrator:
@@ -27,6 +32,9 @@ class ChiefOrchestrator:
         self.last_results: List[Dict] = []
         self.last_run: Optional[str] = None
         self.data_cache: Dict = {}
+        # 학습된 파라미터 로드 및 적용
+        self._params = load_params()
+        apply_params_to_config(self._params)
 
     # ─────────────────────────────────────────
     # 전체 파이프라인 실행
@@ -64,19 +72,88 @@ class ChiefOrchestrator:
         self.last_results = results
         self.last_run = now
 
-        # Step 4: PDF 보고서
+        # Step 4: 예측 저장 (학습용)
+        print("\n[4/5] 💾 Prediction Tracker — 오늘 예측 저장 중...")
+        save_predictions(results)
+        print(f"      ✓ {len(results)}건 예측 기록 완료")
+
+        # Step 5: PDF 보고서
         if generate_report:
-            print("\n[4/4] 📄 Daily Report Writer — PDF 생성 중...")
+            print("\n[5/5] 📄 Daily Report Writer — PDF 생성 중...")
             report_path = generate_pdf(results)
             print(f"      ✓ 저장 완료: {report_path}")
         else:
             report_path = None
+            print("\n[5/5] 📄 PDF 생략 (--no-report)")
 
         print(f"\n{'='*60}")
         print(f"  ✅ 파이프라인 완료 — {now}")
         print(f"{'='*60}\n")
 
         return report_path or ""
+
+    # ─────────────────────────────────────────
+    # 자기학습 루프 (매일 장 마감 후 실행)
+    # ─────────────────────────────────────────
+    def run_learning_loop(self, days_back: int = 1) -> str:
+        """
+        1. N일 전 예측 vs 실제 결과 평가
+        2. 팀 토의로 오답 원인 분석
+        3. 파라미터 자동 조정 + 저장
+        4. 다음 실행부터 조정된 파라미터 적용
+        """
+        print(f"\n{'='*60}")
+        print(f"  🧠 팀 토의 & 자기학습 루프 시작")
+        print(f"{'='*60}")
+
+        # 평가
+        print(f"\n[1/3] 📊 결과 평가 중 (D-{days_back})...")
+        eval_result = evaluate_predictions(days_back=days_back)
+        evaluated = eval_result.get("evaluated", 0)
+        if evaluated == 0:
+            msg = f"  평가할 예측 데이터 없음 (날짜: {eval_result.get('target_date','?')})"
+            print(msg)
+            return msg
+
+        print(f"      적중: {eval_result['hits']}/{evaluated} = {eval_result['accuracy']:.1%}")
+
+        # 팀 토의
+        print(f"\n[2/3] 💬 팀 토의 중...")
+        discussion_result = run_team_discussion(eval_result, self._params)
+        print(discussion_result["discussion"])
+
+        # 파라미터 저장 및 반영
+        print(f"\n[3/3] ⚙️  파라미터 업데이트 중...")
+        self._params = discussion_result["params"]
+        save_params(self._params)
+        apply_params_to_config(self._params)
+
+        if discussion_result["adjusted"]:
+            print(f"      ✅ 파라미터 v{self._params['version']} 저장 완료")
+        else:
+            print(f"      ━  변경 없음 (현 파라미터 유지)")
+
+        print(f"\n{'='*60}")
+        return discussion_result["discussion"]
+
+    def show_learning_status(self) -> None:
+        """학습 현황 출력"""
+        print(f"\n{'='*60}")
+        print(f"  📈 자기학습 현황")
+        print(f"{'='*60}")
+        stats = overall_accuracy()
+        print(f"  누적 평가일: {stats['days']}일")
+        print(f"  전체 적중률: {stats['avg_accuracy']:.1%}  ({stats['total_hits']}/{stats['total_evaluated']}건)")
+        print(f"\n  최근 7일 추이:")
+        print(accuracy_trend_summary())
+        print(f"\n  현재 파라미터 (v{self._params.get('version',0)}):")
+        print(f"    기술 가중치:  {self._params['weight_technical']:.2f}")
+        print(f"    감성 가중치:  {self._params['weight_sentiment']:.2f}")
+        print(f"    매수 임계값:  {self._params['buy_threshold']:.2f}")
+        print(f"    매도 임계값:  {self._params['sell_threshold']:.2f}")
+        print(f"    RSI 과매도:   {self._params['rsi_oversold']:.1f}")
+        print(f"    RSI 과매수:   {self._params['rsi_overbought']:.1f}")
+        print(f"{'='*60}\n")
 
     # ─────────────────────────────────────────
     # 종목 쿼리 응답 (사용자 요청 시)
@@ -88,15 +165,15 @@ class ChiefOrchestrator:
         """
         query = query.strip()
 
-        # 섹터 쿼리
-        for sector in UNIVERSE.keys():
-            if sector in query:
-                return self._sector_summary(sector)
-
-        # 티커 직접 매핑
+        # 티커/이름 먼저 확인 (섹터 이름 포함 종목명 대응)
         ticker = self._resolve_ticker(query)
         if ticker:
             return self._ticker_detail(ticker)
+
+        # 섹터 쿼리 (종목 미매칭 시)
+        for sector in UNIVERSE.keys():
+            if sector in query:
+                return self._sector_summary(sector)
 
         return f"'{query}' 종목을 찾을 수 없습니다.\n사용 가능: {', '.join(TICKER_NAMES.values())}"
 

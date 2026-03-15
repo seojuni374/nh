@@ -24,9 +24,19 @@ def main():
     parser.add_argument("--query", "-q", type=str, help="종목 또는 섹터 조회 (예: 삼성전자, NVDA, 반도체)")
     parser.add_argument("--no-report", action="store_true", help="PDF 보고서 생성 스킵")
     parser.add_argument("--interactive", "-i", action="store_true", help="대화형 모드")
+    parser.add_argument("--learn", action="store_true", help="자기학습 루프 실행 (전일 예측 평가 + 팀 토의)")
+    parser.add_argument("--status", action="store_true", help="학습 현황 및 파라미터 버전 출력")
     args = parser.parse_args()
 
     orch = ChiefOrchestrator()
+
+    if args.status:
+        orch.show_learning_status()
+        return
+
+    if args.learn:
+        orch.run_learning_loop()
+        return
 
     if args.query:
         # 쿼리 모드: 전체 파이프라인 + 특정 종목 상세
@@ -60,6 +70,10 @@ def main():
                 from report.daily_report import generate_pdf
                 path = generate_pdf(orch.last_results)
                 print(f"✓ PDF 저장: {path}")
+            elif user_input.lower() in ("learn", "학습"):
+                orch.run_learning_loop()
+            elif user_input.lower() in ("status", "현황"):
+                orch.show_learning_status()
             else:
                 print(orch.query_ticker(user_input))
 
