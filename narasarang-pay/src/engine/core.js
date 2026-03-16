@@ -178,7 +178,6 @@ export function getWeeklyTrend(transactions) {
 }
 
 export function getOptimalStrategy(persona, monthlySpend) {
-  const tier = getTier(monthlySpend);
   const next = getNextTier(monthlySpend);
   const strategies = [];
   if (next && next.min - monthlySpend < persona.avgSpend * 0.5) {

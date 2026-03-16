@@ -1,3 +1,12 @@
+:root {
+  --accent: #4ADE80;
+  --accent-bg: #0F2016;
+  --accent-border: #22C55E;
+  --border: #243028;
+  --text-h: #E8F0EA;
+  --social-bg: #182219;
+  --shadow: 0 0 12px rgba(74,222,128,0.15);
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { background: #0A0F0C; color: #E8F0EA; overflow-x: hidden; }
 ::-webkit-scrollbar { width: 4px; height: 4px; }
