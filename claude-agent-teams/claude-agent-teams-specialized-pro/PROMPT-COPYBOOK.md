@@ -71,12 +71,19 @@ Require plan approval before any changes.
 치명적인 약점부터 순서대로 공격해줘.
 ```
 
-## 11. 너무 빨리 혼자 결론 내리면
+## 11. 풀 파이프라인
+```text
+/full-pipeline
+[작업 목표]
+연구부터 구현, 최종 검증까지 순서대로 한 번에 진행해줘.
+```
+
+## 13. 너무 빨리 혼자 결론 내리면
 ```text
 Wait for your teammates to complete their tasks before proceeding.
 ```
 
-## 12. 끝났으면 정리
+## 14. 끝났으면 정리
 ```text
 Clean up the team
 ```
